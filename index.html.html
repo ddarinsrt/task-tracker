@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>งานคงค้างของแผนก</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script>
+  tailwind.config = {
+    theme: { extend: {
+      fontFamily: { sans: ['"IBM Plex Sans Thai"', 'Sarabun', 'system-ui', 'sans-serif'] },
+      colors: { ink: '#16233b', paper: '#eef1f5' }
+    } }
+  };
+</script>
+<style>
+  html, body { background: #eef1f5; }
+  .hide-scroll { scrollbar-width: none; }
+  .hide-scroll::-webkit-scrollbar { display: none; }
+  button:focus-visible { outline: 3px solid #2563eb; outline-offset: 2px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spin { animation: spin .8s linear infinite; }
+  @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+</style>
+</head>
+<body class="font-sans text-ink antialiased">
+
+<header class="sticky top-0 z-20 bg-ink text-white" style="padding-top: env(safe-area-inset-top, 0px)">
+  <div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
+    <div>
+      <h1 class="text-lg font-semibold leading-tight">งานคงค้างของแผนก</h1>
+      <p id="updated" class="text-xs text-slate-300">กำลังโหลด…</p>
+    </div>
+    <button id="refresh" class="flex h-11 items-center gap-2 rounded-full bg-white/10 px-4 text-sm font-medium active:bg-white/20" aria-label="รีเฟรชข้อมูล">
+      <svg id="refreshIcon" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
+      รีเฟรช
+    </button>
+  </div>
+</header>
+
+<main class="mx-auto max-w-6xl px-4 pb-10 pt-4" style="padding-bottom: calc(2.5rem + env(safe-area-inset-bottom, 0px))">
+
+  <!-- KPI: ภาพรวม -->
+  <section aria-label="สรุปภาพรวม" class="grid gap-3 md:grid-cols-[minmax(0,18rem)_1fr]">
+    <div class="rounded-2xl bg-ink p-5 text-white">
+      <p class="text-sm text-slate-300">งานค้างทั้งหมด</p>
+      <p id="kpiTotal" class="mt-1 text-6xl font-bold leading-none tabular-nums">–</p>
+      <div id="kpiUrgency" class="mt-4 flex flex-wrap gap-2 text-xs"></div>
+    </div>
+
+    <div>
+      <p class="mb-2 text-sm font-medium text-slate-600">แยกรายแผนก <span class="font-normal text-slate-400">(แตะเพื่อกรอง)</span></p>
+      <div id="deptChips" class="hide-scroll -mx-4 flex snap-x gap-2.5 overflow-x-auto px-4 pb-1 md:mx-0 md:grid md:grid-cols-3 md:overflow-visible md:px-0 lg:grid-cols-4"></div>
+    </div>
+  </section>
+
+  <!-- Filter: สถานะ -->
+  <section aria-label="ตัวกรองสถานะ" class="mt-5">
+    <div id="statusTabs" class="hide-scroll -mx-4 flex gap-2 overflow-x-auto px-4 md:mx-0 md:px-0"></div>
+    <p id="resultInfo" class="mt-3 text-sm text-slate-500"></p>
+  </section>
+
+  <!-- Task list -->
+  <section id="taskList" aria-label="รายการงาน" class="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3"></section>
+</main>
+
+<script>
+/* =====================================================
+   ตั้งค่า: วาง URL ของ Web App (Google Apps Script) ที่ Deploy แล้วใน API_URL
+   - ถ้าเว้นว่างไว้ ระบบจะแสดงข้อมูลตัวอย่างแทน
+   - TOKEN ต้องตรงกับค่า TOKEN ในสคริปต์ (ถ้าไม่ตั้งในสคริปต์ ให้เว้นว่าง)
+   ===================================================== */
+const CONFIG = {
+  API_URL: '',   // เช่น 'https://script.google.com/macros/s/xxxxxxxx/exec'
+  TOKEN: '',
+};
+const usingMock = () => !CONFIG.API_URL;
+
+const URGENCY = {
+  'ด่วนที่สุด': { rank: 0, cls: 'bg-red-600 text-white' },
+  'ด่วนมาก':   { rank: 1, cls: 'bg-orange-500 text-white' },
+  'ด่วน':      { rank: 2, cls: 'bg-amber-100 text-amber-800' },
+  'ปกติ':      { rank: 3, cls: 'bg-slate-100 text-slate-600' },
+};
+
+const STATUS = {
+  'ยังไม่เสร็จ':     { bar: 'bg-red-500',    pill: 'bg-red-50 text-red-700',       dot: 'bg-red-500' },
+  'กำลังดำเนินการ': { bar: 'bg-amber-400',  pill: 'bg-amber-50 text-amber-800',   dot: 'bg-amber-400' },
+  'เสร็จสิ้น':       { bar: 'bg-emerald-500', pill: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
+};
+
+const STATUS_TABS = [
+  { key: 'open',   label: 'ค้างทั้งหมด' },
+  { key: 'ยังไม่เสร็จ',     label: 'ยังไม่เสร็จ' },
+  { key: 'กำลังดำเนินการ', label: 'กำลังดำเนินการ' },
+  { key: 'เสร็จสิ้น',       label: 'เสร็จสิ้น' },
+  { key: 'all',    label: 'ทั้งหมด' },
+];
+
+const state = { tasks: [], dept: 'all', status: 'open' };
+
+/* ---------- ข้อมูลจำลอง ---------- */
+const daysAgo = n => { const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() - n); return d; };
+
+function getMockTasks() {
+  return [
+    { date: daysAgo(21), title: 'หนังสือขอรับการสนับสนุนงบประมาณซ่อมแซมอาคาร 2', dept: 'ฝ่ายช่าง', note: 'ให้สำรวจความเสียหายและเสนอราคากลางภายในสัปดาห์นี้ พร้อมรายงานผลให้ผู้อำนวยการทราบ', urgency: 'ด่วนที่สุด', status: 'ยังไม่เสร็จ' },
+    { date: daysAgo(14), title: 'ขอความอนุเคราะห์ข้อมูลบุคลากรประจำปี 2569', dept: 'ฝ่ายบุคคล', note: 'รวบรวมข้อมูลตามแบบฟอร์มที่แนบ ตรวจสอบความถูกต้องก่อนส่งกลับ', urgency: 'ด่วนมาก', status: 'กำลังดำเนินการ' },
+    { date: daysAgo(10), title: 'แจ้งเวียนมาตรการประหยัดพลังงานภายในหน่วยงาน', dept: 'ฝ่ายบริหารทั่วไป', note: 'ให้แจ้งเวียนทุกฝ่าย และรายงานผลการดำเนินการภายใน 15 วัน', urgency: 'ปกติ', status: 'ยังไม่เสร็จ' },
+    { date: daysAgo(9), title: 'รายงานการใช้จ่ายงบประมาณไตรมาส 4', dept: 'ฝ่ายการเงินและบัญชี', note: 'ตรวจสอบยอดเบิกจ่ายให้ตรงกับระบบ แล้วสรุปเสนอผู้บริหารก่อนการประชุมวันศุกร์', urgency: 'ด่วน', status: 'กำลังดำเนินการ' },
+    { date: daysAgo(8), title: 'ขอเชิญประชุมคณะกรรมการติดตามแผนปฏิบัติการ', dept: 'ฝ่ายแผนงาน', note: 'จัดเตรียมวาระการประชุมและเอกสารประกอบ ประสานห้องประชุมล่วงหน้า', urgency: 'ด่วน', status: 'ยังไม่เสร็จ' },
+    { date: daysAgo(7), title: 'ตอบข้อหารือการจัดซื้อครุภัณฑ์สำนักงาน', dept: 'ฝ่ายการเงินและบัญชี', note: 'ให้ตรวจสอบระเบียบพัสดุ และตอบข้อหารือเป็นลายลักษณ์อักษร', urgency: 'ปกติ', status: 'ยังไม่เสร็จ' },
+    { date: daysAgo(6), title: 'แต่งตั้งคณะทำงานตรวจรับพัสดุ', dept: 'ฝ่ายบุคคล', note: 'เสนอรายชื่อคณะทำงานไม่น้อยกว่า 3 คน พร้อมร่างคำสั่งแต่งตั้ง', urgency: 'ด่วนมาก', status: 'ยังไม่เสร็จ' },
+    { date: daysAgo(5), title: 'ประสานการเตรียมสถานที่รับการตรวจเยี่ยม', dept: 'ฝ่ายบริหารทั่วไป', note: 'ตรวจความเรียบร้อยของห้องประชุมและจุดลงทะเบียน รายงานผลก่อนวันตรวจเยี่ยม 2 วัน', urgency: 'ด่วนที่สุด', status: 'กำลังดำเนินการ' },
+    { date: daysAgo(4), title: 'ขออนุมัติเดินทางไปราชการต่างจังหวัด', dept: 'ฝ่ายแผนงาน', note: 'ตรวจสอบสิทธิ์การเบิกค่าใช้จ่ายและเสนอขออนุมัติตามลำดับ', urgency: 'ปกติ', status: 'ยังไม่เสร็จ' },
+    { date: daysAgo(3), title: 'ซ่อมแซมระบบไฟฟ้าห้องเก็บเอกสาร', dept: 'ฝ่ายช่าง', note: 'ดำเนินการแก้ไขโดยเร็ว เนื่องจากมีความเสี่ยงต่อความปลอดภัย', urgency: 'ด่วนมาก', status: 'กำลังดำเนินการ' },
+    { date: daysAgo(2), title: 'สรุปผลการดำเนินงานตามตัวชี้วัดประจำเดือน', dept: 'ฝ่ายแผนงาน', note: 'ให้จัดทำสรุปเป็นตารางเปรียบเทียบกับเป้าหมาย แนบเสนอในการประชุมประจำเดือน', urgency: 'ด่วน', status: 'ยังไม่เสร็จ' },
+    { date: daysAgo(12), title: 'ตอบรับเข้าร่วมอบรมหลักสูตรการบริหารงานบุคคล', dept: 'ฝ่ายบุคคล', note: 'แจ้งชื่อผู้เข้าอบรมกลับไปยังหน่วยงานผู้จัด', urgency: 'ปกติ', status: 'เสร็จสิ้น' },
+    { date: daysAgo(11), title: 'ปรับปรุงป้ายประชาสัมพันธ์หน้าอาคาร', dept: 'ฝ่ายช่าง', note: 'ติดตั้งป้ายใหม่ตามแบบที่ได้รับอนุมัติ', urgency: 'ปกติ', status: 'เสร็จสิ้น' },
+    { date: daysAgo(1), title: 'ขอทราบผลการดำเนินการตามข้อร้องเรียน', dept: 'ฝ่ายบริหารทั่วไป', note: 'ตรวจสอบข้อเท็จจริง และตอบกลับผู้ร้องเรียนภายใน 7 วัน', urgency: 'ด่วน', status: 'ยังไม่เสร็จ' },
+  ];
+}
+
+/* ---------- ดึงข้อมูลจาก Google Apps Script ---------- */
+function parseDate(v) {
+  if (!v) return null;
+  const m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);   // รูปแบบ yyyy-MM-dd จากสคริปต์
+  if (!m) { const d = new Date(v); return isNaN(d) ? null : d; }
+  let y = +m[1];
+  if (y > 2400) y -= 543;                                   // กันกรณีปีเป็น พ.ศ.
+  return new Date(y, +m[2] - 1, +m[3]);
+}
+
+async function fetchTasks() {
+  if (usingMock()) {
+    await new Promise(r => setTimeout(r, 400));
+    return getMockTasks();
+  }
+  const url = CONFIG.API_URL + (CONFIG.TOKEN ? '?key=' + encodeURIComponent(CONFIG.TOKEN) : '');
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const json = await res.json();
+  if (!json.ok) throw new Error(json.error || 'ข้อมูลไม่ถูกต้อง');
+  return json.tasks.map(r => ({
+    date: parseDate(r.date),
+    title: String(r.title || '').trim(),
+    dept: String(r.dept || '').trim() || 'ไม่ระบุแผนก',
+    note: String(r.note || '').trim(),
+    urgency: URGENCY[r.urgency] ? r.urgency : 'ปกติ',
+    status: STATUS[r.status] ? r.status : 'ยังไม่เสร็จ',
+  })).filter(t => t.title);
+}
+
+/* ---------- ตัวช่วย ---------- */
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+const isOpen = t => t.status !== 'เสร็จสิ้น';
+const fmtDate = d => d ? d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' }) : '–';
+const ageDays = d => { if (!d) return 0; const t = new Date(); t.setHours(0,0,0,0); return Math.max(0, Math.round((t - d) / 864e5)); };
+
+/* ---------- แสดงผล ---------- */
+function renderKpi() {
+  const open = state.tasks.filter(isOpen);
+  $('kpiTotal').textContent = open.length;
+
+  const urgentBadges = ['ด่วนที่สุด', 'ด่วนมาก', 'ด่วน']
+    .map(u => ({ u, n: open.filter(t => t.urgency === u).length }))
+    .filter(x => x.n > 0)
+    .map(x => `<span class="rounded-full px-2.5 py-1 font-medium ${URGENCY[x.u].cls}">${x.u} ${x.n}</span>`)
+    .join('');
+  $('kpiUrgency').innerHTML = urgentBadges || '<span class="text-slate-300">ไม่มีงานด่วนค้างอยู่</span>';
+
+  const depts = [...new Set(state.tasks.map(t => t.dept))].sort((a, b) => a.localeCompare(b, 'th'));
+  const chip = (key, label, n, urgent) => {
+    const on = state.dept === key;
+    return `<button data-dept="${esc(key)}" aria-pressed="${on}" class="min-w-[8.5rem] shrink-0 snap-start rounded-xl p-3 text-left ring-1 transition-colors md:min-w-0 ${on ? 'bg-ink text-white ring-ink' : 'bg-white ring-slate-200 active:bg-slate-50'}">
+      <span class="block text-2xl font-bold leading-none tabular-nums">${n}</span>
+      <span class="mt-1.5 block text-sm leading-snug ${on ? 'text-slate-200' : 'text-slate-600'}">${esc(label)}</span>
+      ${urgent ? `<span class="mt-1.5 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${on ? 'bg-white/15 text-white' : 'bg-red-50 text-red-700'}">ด่วนมากขึ้นไป ${urgent}</span>` : ''}
+    </button>`;
+  };
+  const urgentCount = list => list.filter(t => URGENCY[t.urgency].rank <= 1).length;
+  $('deptChips').innerHTML =
+    chip('all', 'ทุกแผนก', open.length, urgentCount(open)) +
+    depts.map(d => { const l = open.filter(t => t.dept === d); return chip(d, d, l.length, urgentCount(l)); }).join('');
+}
+
+function renderTabs() {
+  $('statusTabs').innerHTML = STATUS_TABS.map(t => {
+    const on = state.status === t.key;
+    const dot = STATUS[t.key] ? `<span class="h-2 w-2 rounded-full ${STATUS[t.key].dot}"></span>` : '';
+    return `<button data-status="${esc(t.key)}" aria-pressed="${on}" class="flex h-11 shrink-0 items-center gap-2 rounded-full px-4 text-sm font-medium ring-1 ${on ? 'bg-ink text-white ring-ink' : 'bg-white text-slate-700 ring-slate-200 active:bg-slate-50'}">${dot}${t.label}</button>`;
+  }).join('');
+}
+
+function filtered() {
+  return state.tasks
+    .filter(t => state.dept === 'all' || t.dept === state.dept)
+    .filter(t => state.status === 'all' ? true : state.status === 'open' ? isOpen(t) : t.status === state.status)
+    .sort((a, b) => URGENCY[a.urgency].rank - URGENCY[b.urgency].rank || (a.date || 0) - (b.date || 0));
+}
+
+function taskCard(t) {
+  const s = STATUS[t.status];
+  const age = ageDays(t.date);
+  const late = isOpen(t) && age >= 7;
+  return `<article class="relative overflow-hidden rounded-xl bg-white ring-1 ring-slate-200 ${isOpen(t) ? '' : 'opacity-70'}">
+    <span class="absolute inset-y-0 left-0 w-1.5 ${s.bar}"></span>
+    <div class="py-4 pl-5 pr-4">
+      <div class="flex items-start justify-between gap-3">
+        <h3 class="text-base font-semibold leading-snug">${esc(t.title)}</h3>
+        <span class="shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${URGENCY[t.urgency].cls}">${esc(t.urgency)}</span>
+      </div>
+      <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500">
+        <span>${esc(t.dept)}</span>
+        <span>สั่งการ ${fmtDate(t.date)}</span>
+      </div>
+      <div class="mt-3 rounded-lg bg-slate-50 px-3 py-2.5">
+        <p class="text-xs font-medium text-slate-500">คำสั่งการท้ายหนังสือ</p>
+        <p class="mt-0.5 text-sm leading-relaxed text-slate-800">${esc(t.note) || '–'}</p>
+      </div>
+      <div class="mt-3 flex items-center justify-between gap-2">
+        <span class="rounded-full px-2.5 py-1 text-xs font-medium ${s.pill}">${esc(t.status)}</span>
+        ${isOpen(t) ? `<span class="text-xs ${late ? 'font-semibold text-red-600' : 'text-slate-400'}">ค้างมา ${age} วัน</span>` : ''}
+      </div>
+    </div>
+  </article>`;
+}
+
+function renderList() {
+  const list = filtered();
+  $('resultInfo').textContent = `แสดง ${list.length} รายการ` + (state.dept !== 'all' ? ` ของ${state.dept}` : '') + ' เรียงตามความเร่งด่วน';
+  $('taskList').innerHTML = list.length
+    ? list.map(taskCard).join('')
+    : `<div class="col-span-full rounded-xl bg-white p-8 text-center ring-1 ring-slate-200">
+         <p class="font-medium">ไม่มีงานตามตัวกรองนี้</p>
+         <p class="mt-1 text-sm text-slate-500">ลองเปลี่ยนแผนกหรือสถานะที่เลือก</p>
+         <button data-reset class="mt-4 h-11 rounded-full bg-ink px-5 text-sm font-medium text-white">ล้างตัวกรอง</button>
+       </div>`;
+}
+
+function renderAll() { renderKpi(); renderTabs(); renderList(); }
+
+/* ---------- เหตุการณ์ ---------- */
+document.addEventListener('click', e => {
+  const d = e.target.closest('[data-dept]');
+  const s = e.target.closest('[data-status]');
+  if (d) { state.dept = d.dataset.dept; renderAll(); }
+  else if (s) { state.status = s.dataset.status; renderAll(); }
+  else if (e.target.closest('[data-reset]')) { state.dept = 'all'; state.status = 'all'; renderAll(); }
+});
+
+async function load() {
+  $('refreshIcon').classList.add('spin');
+  try {
+    state.tasks = await fetchTasks();
+    $('updated').textContent = 'อัปเดตล่าสุด ' + new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.' + (usingMock() ? ' (ข้อมูลตัวอย่าง)' : '');
+    renderAll();
+  } catch (err) {
+    $('updated').textContent = 'โหลดข้อมูลไม่สำเร็จ ตรวจสอบ URL และการ Deploy แล้วลองใหม่';
+  } finally {
+    $('refreshIcon').classList.remove('spin');
+  }
+}
+$('refresh').addEventListener('click', load);
+load();
+</script>
+</body>
+</html>
