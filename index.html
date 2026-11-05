@@ -52,8 +52,8 @@
     </div>
 
     <div>
-      <p class="mb-2 text-sm font-medium text-slate-600">แยกรายแผนก <span class="font-normal text-slate-400">(แตะเพื่อกรอง)</span></p>
-      <div id="deptChips" class="hide-scroll -mx-4 flex snap-x gap-2.5 overflow-x-auto px-4 pb-1 md:mx-0 md:grid md:grid-cols-3 md:overflow-visible md:px-0 lg:grid-cols-4"></div>
+      <p class="mb-2 text-sm font-medium text-slate-600">แยกรายแผนก <span class="font-normal text-slate-400">(แตะเพื่อดูงานของแผนก)</span></p>
+      <div id="deptChips" class="grid grid-cols-3 gap-2.5"></div>
     </div>
   </section>
 
@@ -70,14 +70,20 @@
 <script>
 /* =====================================================
    ตั้งค่า: วาง URL ของ Web App (Google Apps Script) ที่ Deploy แล้วใน API_URL
-   - ถ้าเว้นว่างไว้ ระบบจะแสดงข้อมูลตัวอย่างแทน
    - TOKEN ต้องตรงกับค่า TOKEN ในสคริปต์ (ถ้าไม่ตั้งในสคริปต์ ให้เว้นว่าง)
    ===================================================== */
 const CONFIG = {
   API_URL: 'https://script.google.com/macros/s/AKfycbwVxdgbX3TEC5NJaXWH8QGAw1C65NVWMAWe4VGuQS_CKKFH_a1gDdQHzVaS2pzDnpGl/exec',
   TOKEN: '',
 };
-const usingMock = () => !CONFIG.API_URL;
+
+// แผนกที่ใช้ในระบบ (ต้องสะกดตรงกับคอลัมน์แผนกในชีต)
+const DEPTS = ['ผคป.', 'ผคอ.'];
+const normDept = v => {
+  const t = String(v || '').replace(/\s/g, '');
+  const key = x => x.replace(/\./g, '');
+  return DEPTS.find(d => key(d) === key(t)) || t || 'ไม่ระบุแผนก';
+};
 
 const URGENCY = {
   'ด่วนที่สุด': { rank: 0, cls: 'bg-red-600 text-white' },
@@ -102,28 +108,6 @@ const STATUS_TABS = [
 
 const state = { tasks: [], dept: 'all', status: 'open' };
 
-/* ---------- ข้อมูลจำลอง ---------- */
-const daysAgo = n => { const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() - n); return d; };
-
-function getMockTasks() {
-  return [
-    { date: daysAgo(21), title: 'หนังสือขอรับการสนับสนุนงบประมาณซ่อมแซมอาคาร 2', dept: 'ฝ่ายช่าง', note: 'ให้สำรวจความเสียหายและเสนอราคากลางภายในสัปดาห์นี้ พร้อมรายงานผลให้ผู้อำนวยการทราบ', urgency: 'ด่วนที่สุด', status: 'ยังไม่เสร็จ' },
-    { date: daysAgo(14), title: 'ขอความอนุเคราะห์ข้อมูลบุคลากรประจำปี 2569', dept: 'ฝ่ายบุคคล', note: 'รวบรวมข้อมูลตามแบบฟอร์มที่แนบ ตรวจสอบความถูกต้องก่อนส่งกลับ', urgency: 'ด่วนมาก', status: 'กำลังดำเนินการ' },
-    { date: daysAgo(10), title: 'แจ้งเวียนมาตรการประหยัดพลังงานภายในหน่วยงาน', dept: 'ฝ่ายบริหารทั่วไป', note: 'ให้แจ้งเวียนทุกฝ่าย และรายงานผลการดำเนินการภายใน 15 วัน', urgency: 'ปกติ', status: 'ยังไม่เสร็จ' },
-    { date: daysAgo(9), title: 'รายงานการใช้จ่ายงบประมาณไตรมาส 4', dept: 'ฝ่ายการเงินและบัญชี', note: 'ตรวจสอบยอดเบิกจ่ายให้ตรงกับระบบ แล้วสรุปเสนอผู้บริหารก่อนการประชุมวันศุกร์', urgency: 'ด่วน', status: 'กำลังดำเนินการ' },
-    { date: daysAgo(8), title: 'ขอเชิญประชุมคณะกรรมการติดตามแผนปฏิบัติการ', dept: 'ฝ่ายแผนงาน', note: 'จัดเตรียมวาระการประชุมและเอกสารประกอบ ประสานห้องประชุมล่วงหน้า', urgency: 'ด่วน', status: 'ยังไม่เสร็จ' },
-    { date: daysAgo(7), title: 'ตอบข้อหารือการจัดซื้อครุภัณฑ์สำนักงาน', dept: 'ฝ่ายการเงินและบัญชี', note: 'ให้ตรวจสอบระเบียบพัสดุ และตอบข้อหารือเป็นลายลักษณ์อักษร', urgency: 'ปกติ', status: 'ยังไม่เสร็จ' },
-    { date: daysAgo(6), title: 'แต่งตั้งคณะทำงานตรวจรับพัสดุ', dept: 'ฝ่ายบุคคล', note: 'เสนอรายชื่อคณะทำงานไม่น้อยกว่า 3 คน พร้อมร่างคำสั่งแต่งตั้ง', urgency: 'ด่วนมาก', status: 'ยังไม่เสร็จ' },
-    { date: daysAgo(5), title: 'ประสานการเตรียมสถานที่รับการตรวจเยี่ยม', dept: 'ฝ่ายบริหารทั่วไป', note: 'ตรวจความเรียบร้อยของห้องประชุมและจุดลงทะเบียน รายงานผลก่อนวันตรวจเยี่ยม 2 วัน', urgency: 'ด่วนที่สุด', status: 'กำลังดำเนินการ' },
-    { date: daysAgo(4), title: 'ขออนุมัติเดินทางไปราชการต่างจังหวัด', dept: 'ฝ่ายแผนงาน', note: 'ตรวจสอบสิทธิ์การเบิกค่าใช้จ่ายและเสนอขออนุมัติตามลำดับ', urgency: 'ปกติ', status: 'ยังไม่เสร็จ' },
-    { date: daysAgo(3), title: 'ซ่อมแซมระบบไฟฟ้าห้องเก็บเอกสาร', dept: 'ฝ่ายช่าง', note: 'ดำเนินการแก้ไขโดยเร็ว เนื่องจากมีความเสี่ยงต่อความปลอดภัย', urgency: 'ด่วนมาก', status: 'กำลังดำเนินการ' },
-    { date: daysAgo(2), title: 'สรุปผลการดำเนินงานตามตัวชี้วัดประจำเดือน', dept: 'ฝ่ายแผนงาน', note: 'ให้จัดทำสรุปเป็นตารางเปรียบเทียบกับเป้าหมาย แนบเสนอในการประชุมประจำเดือน', urgency: 'ด่วน', status: 'ยังไม่เสร็จ' },
-    { date: daysAgo(12), title: 'ตอบรับเข้าร่วมอบรมหลักสูตรการบริหารงานบุคคล', dept: 'ฝ่ายบุคคล', note: 'แจ้งชื่อผู้เข้าอบรมกลับไปยังหน่วยงานผู้จัด', urgency: 'ปกติ', status: 'เสร็จสิ้น' },
-    { date: daysAgo(11), title: 'ปรับปรุงป้ายประชาสัมพันธ์หน้าอาคาร', dept: 'ฝ่ายช่าง', note: 'ติดตั้งป้ายใหม่ตามแบบที่ได้รับอนุมัติ', urgency: 'ปกติ', status: 'เสร็จสิ้น' },
-    { date: daysAgo(1), title: 'ขอทราบผลการดำเนินการตามข้อร้องเรียน', dept: 'ฝ่ายบริหารทั่วไป', note: 'ตรวจสอบข้อเท็จจริง และตอบกลับผู้ร้องเรียนภายใน 7 วัน', urgency: 'ด่วน', status: 'ยังไม่เสร็จ' },
-  ];
-}
-
 /* ---------- ดึงข้อมูลจาก Google Apps Script ---------- */
 function parseDate(v) {
   if (!v) return null;
@@ -135,10 +119,6 @@ function parseDate(v) {
 }
 
 async function fetchTasks() {
-  if (usingMock()) {
-    await new Promise(r => setTimeout(r, 400));
-    return getMockTasks();
-  }
   const url = CONFIG.API_URL + (CONFIG.TOKEN ? '?key=' + encodeURIComponent(CONFIG.TOKEN) : '');
   const res = await fetch(url);
   if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -147,7 +127,7 @@ async function fetchTasks() {
   return json.tasks.map(r => ({
     date: parseDate(r.date),
     title: String(r.title || '').trim(),
-    dept: String(r.dept || '').trim() || 'ไม่ระบุแผนก',
+    dept: normDept(r.dept),
     note: String(r.note || '').trim(),
     urgency: URGENCY[r.urgency] ? r.urgency : 'ปกติ',
     status: STATUS[r.status] ? r.status : 'ยังไม่เสร็จ',
@@ -173,19 +153,18 @@ function renderKpi() {
     .join('');
   $('kpiUrgency').innerHTML = urgentBadges || '<span class="text-slate-300">ไม่มีงานด่วนค้างอยู่</span>';
 
-  const depts = [...new Set(state.tasks.map(t => t.dept))].sort((a, b) => a.localeCompare(b, 'th'));
   const chip = (key, label, n, urgent) => {
     const on = state.dept === key;
-    return `<button data-dept="${esc(key)}" aria-pressed="${on}" class="min-w-[8.5rem] shrink-0 snap-start rounded-xl p-3 text-left ring-1 transition-colors md:min-w-0 ${on ? 'bg-ink text-white ring-ink' : 'bg-white ring-slate-200 active:bg-slate-50'}">
+    return `<button data-dept="${esc(key)}" aria-pressed="${on}" class="rounded-xl p-3 text-left ring-1 transition-colors ${on ? 'bg-ink text-white ring-ink' : 'bg-white ring-slate-200 active:bg-slate-50'}">
       <span class="block text-2xl font-bold leading-none tabular-nums">${n}</span>
       <span class="mt-1.5 block text-sm leading-snug ${on ? 'text-slate-200' : 'text-slate-600'}">${esc(label)}</span>
-      ${urgent ? `<span class="mt-1.5 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${on ? 'bg-white/15 text-white' : 'bg-red-50 text-red-700'}">ด่วนมากขึ้นไป ${urgent}</span>` : ''}
+      ${urgent ? `<span class="mt-1.5 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${on ? 'bg-white/15 text-white' : 'bg-red-50 text-red-700'}">ด่วนมาก+ ${urgent}</span>` : ''}
     </button>`;
   };
   const urgentCount = list => list.filter(t => URGENCY[t.urgency].rank <= 1).length;
   $('deptChips').innerHTML =
     chip('all', 'ทุกแผนก', open.length, urgentCount(open)) +
-    depts.map(d => { const l = open.filter(t => t.dept === d); return chip(d, d, l.length, urgentCount(l)); }).join('');
+    DEPTS.map(d => { const l = open.filter(t => t.dept === d); return chip(d, d, l.length, urgentCount(l)); }).join('');
 }
 
 function renderTabs() {
@@ -250,17 +229,26 @@ document.addEventListener('click', e => {
   const s = e.target.closest('[data-status]');
   if (d) { state.dept = d.dataset.dept; renderAll(); }
   else if (s) { state.status = s.dataset.status; renderAll(); }
+  else if (e.target.closest('[data-retry]')) { load(); }
   else if (e.target.closest('[data-reset]')) { state.dept = 'all'; state.status = 'all'; renderAll(); }
 });
 
 async function load() {
   $('refreshIcon').classList.add('spin');
+  if (!state.tasks.length) $('taskList').innerHTML = '<p class="col-span-full py-10 text-center text-slate-500">กำลังโหลดข้อมูล…</p>';
   try {
     state.tasks = await fetchTasks();
-    $('updated').textContent = 'อัปเดตล่าสุด ' + new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.' + (usingMock() ? ' (ข้อมูลตัวอย่าง)' : '');
+    $('updated').textContent = 'อัปเดตล่าสุด ' + new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
     renderAll();
   } catch (err) {
-    $('updated').textContent = 'โหลดข้อมูลไม่สำเร็จ ตรวจสอบ URL และการ Deploy แล้วลองใหม่';
+    $('updated').textContent = 'โหลดข้อมูลไม่สำเร็จ';
+    if (!state.tasks.length) {
+      $('taskList').innerHTML = `<div class="col-span-full rounded-xl bg-white p-8 text-center ring-1 ring-slate-200">
+        <p class="font-medium">โหลดข้อมูลไม่สำเร็จ</p>
+        <p class="mt-1 text-sm text-slate-500">ตรวจสอบอินเทอร์เน็ต แล้วลองอีกครั้ง</p>
+        <button data-retry class="mt-4 h-11 rounded-full bg-ink px-5 text-sm font-medium text-white">ลองใหม่</button>
+      </div>`;
+    }
   } finally {
     $('refreshIcon').classList.remove('spin');
   }
