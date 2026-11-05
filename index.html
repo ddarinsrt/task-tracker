@@ -1,445 +1,177 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#16233b">
-<title>ระบบติดตามงานคงค้าง กคน.</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdn.tailwindcss.com/3.4.17"></script>
-<script>
-  tailwind.config = {
-    theme: { extend: {
-      fontFamily: { sans: ['"IBM Plex Sans Thai"', 'Sarabun', 'system-ui', 'sans-serif'] },
-      colors: { ink: '#16233b', paper: '#eef1f5' }
-    } }
-  };
-</script>
-<style>
-  html, body { background: #eef1f5; }
-  .hide-scroll { scrollbar-width: none; }
-  .hide-scroll::-webkit-scrollbar { display: none; }
-  button:focus-visible, a:focus-visible { outline: 3px solid #2563eb; outline-offset: 2px; }
-  .field { width: 100%; min-height: 3rem; border-radius: .5rem; border: 1px solid #cbd5e1; background: #fff; padding: .5rem .75rem; font-size: 1rem; color: #16233b; }
-  .field:focus { outline: 3px solid rgba(37,99,235,.25); border-color: #2563eb; }
-  textarea.field { min-height: 7rem; line-height: 1.6; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .spin { animation: spin .8s linear infinite; }
-  @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบติดตามงาน กคน.</title>
+    <script src="https://tailwindcss.com"></script>
+    <link href="https://googleapis.com" rel="stylesheet">
+    <style>body { font-family: 'Sarabun', sans-serif; }</style>
 </head>
-<body class="font-sans text-ink antialiased">
+<body class="bg-gray-50 text-gray-800">
 
-<header class="sticky top-0 z-20 bg-ink text-white" style="padding-top: env(safe-area-inset-top, 0px)">
-  <div class="mx-auto flex max-w-6xl items-center justify-between px-4 pb-2 pt-3">
-    <div>
-      <h1 class="text-lg font-semibold leading-tight">ระบบติดตามงานคงค้าง กคน.</h1>
-      <p id="updated" class="text-xs text-slate-300">กำลังโหลด…</p>
+    <nav class="bg-blue-900 text-white shadow-md sticky top-0 z-50">
+        <div class="max-w-md mx-auto px-4 py-3 flex justify-between items-center">
+            <span class="font-bold text-lg">ระบบติดตามงาน กคน.</span>
+            <div class="flex space-x-2">
+                <button id="btn-dash" onclick="switchPage('dash')" class="px-3 py-1 bg-blue-700 rounded-md font-semibold text-sm">หัวหน้า</button>
+                <button id="btn-admin" onclick="switchPage('admin')" class="px-3 py-1 hover:bg-blue-800 rounded-md text-sm text-gray-300">ธุรการ</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- หน้าจอ Dashboard หัวหน้า -->
+    <main id="page-dash" class="max-w-md mx-auto px-4 py-6">
+        <div class="grid grid-cols-3 gap-2 mb-6">
+            <div class="bg-white p-3 rounded-xl shadow-sm text-center border-l-4 border-blue-500">
+                <p class="text-xs text-gray-500">งานค้างทั้งหมด</p>
+                <p id="count-all" class="text-xl font-bold text-blue-900">0</p>
+            </div>
+            <div class="bg-white p-3 rounded-xl shadow-sm text-center border-l-4 border-purple-500">
+                <p class="text-xs text-gray-500">ค้าง ผคป.</p>
+                <p id="count-pkp" class="text-xl font-bold text-purple-900">0</p>
+            </div>
+            <div class="bg-white p-3 rounded-xl shadow-sm text-center border-l-4 border-orange-500">
+                <p class="text-xs text-gray-500">ค้าง ผคอ.</p>
+                <p id="count-pko" class="text-xl font-bold text-orange-900">0</p>
+            </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl shadow-sm mb-6 space-y-2">
+            <label class="text-xs font-semibold text-gray-600 block">ตัวกรองแผนก</label>
+            <select id="filter-dept" onchange="renderTasks()" class="w-full p-2 border rounded-lg text-sm bg-gray-50">
+                <option value="all">ดูทั้งหมดทุกแผนก</option>
+                <option value="ผคป.">เฉพาะแผนก ผคป.</option>
+                <option value="ผคอ.">เฉพาะแผนก ผคอ.</option>
+            </select>
+        </div>
+
+        <h2 class="font-bold text-gray-700 mb-3 text-base flex justify-between items-center">
+            <span>รายการหนังสือราชการ</span>
+            <button onclick="fetchData()" class="text-xs text-blue-600 font-normal">🔄 รีเฟรช</button>
+        </h2>
+        <div id="task-container" class="space-y-4">
+            <p class="text-center text-gray-400 py-8 text-sm">กำลังโหลดข้อมูลงาน...</p>
+        </div>
+    </main>
+
+    <!-- หน้าจอล็อกอินธุรการ -->
+    <div id="page-login" class="max-w-md mx-auto px-4 py-12 hidden">
+        <div class="bg-white p-6 rounded-2xl shadow-sm border text-center">
+            <h2 class="font-bold text-lg mb-4 text-gray-700">🔒 เจ้าหน้าที่ธุรการ</h2>
+            <input type="password" id="input-pass" placeholder="กรอกรหัสผ่าน" class="w-full p-3 border rounded-xl text-center mb-4 bg-gray-50">
+            <button onclick="checkPassword()" class="w-full bg-blue-900 text-white p-3 rounded-xl font-bold shadow-sm hover:bg-blue-800">เข้าสู่ระบบ</button>
+        </div>
     </div>
-    <button id="refresh" class="flex h-11 items-center gap-2 rounded-full bg-white/10 px-4 text-sm font-medium active:bg-white/20" aria-label="รีเฟรชข้อมูล">
-      <svg id="refreshIcon" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
-      รีเฟรช
-    </button>
-  </div>
-  <nav class="mx-auto flex max-w-6xl gap-1 px-4" role="tablist" aria-label="เมนูหลัก">
-    <button role="tab" data-view="dash" class="h-12 border-b-4 px-4 text-sm font-semibold">ภาพรวมงาน</button>
-    <button role="tab" data-view="admin" class="h-12 border-b-4 px-4 text-sm font-semibold">ป้อนข้อมูล (ธุรการ)</button>
-  </nav>
-</header>
 
-<main class="mx-auto max-w-6xl px-4 pt-4" style="padding-bottom: calc(2.5rem + env(safe-area-inset-bottom, 0px))">
+    <!-- ฟอร์มธุรการ -->
+    <main id="page-admin" class="max-w-md mx-auto px-4 py-6 hidden">
+        <div class="bg-white p-6 rounded-2xl shadow-sm border space-y-4">
+            <h2 class="font-bold text-lg text-gray-700 border-b pb-2 flex justify-between items-center">
+                <span id="form-title">📝 บันทึกงานใหม่</span>
+                <button onclick="cancelEdit()" class="text-xs text-red-500 font-normal">ยกเลิก/กลับ</button>
+            </h2>
+            
+            <input type="hidden" id="form-id">
+            
+            <!-- ส่วนที่ 1: ข้อมูลหนังสือรับเข้า (B-C) -->
+            <div class="grid grid-cols-2 gap-2 bg-blue-50 p-3 rounded-xl border border-blue-100">
+                <div>
+                    <label class="text-[11px] font-bold text-blue-900 block mb-1">วันที่รับเข้า</label>
+                    <input type="date" id="form-inDate" class="w-full p-2 border rounded-lg text-sm bg-white">
+                </div>
+                <div>
+                    <label class="text-[11px] font-bold text-blue-900 block mb-1">เลขหนังสือรับเข้า</label>
+                    <input type="text" id="form-inNo" placeholder="เลขรับ..." class="w-full p-2 border rounded-lg text-sm bg-white">
+                </div>
+            </div>
 
-  <!-- ===== หน้า 1: Dashboard ===== -->
-  <div id="viewDash">
-    <section aria-label="ตัวกรอง" class="rounded-2xl bg-white p-3 ring-1 ring-slate-200">
-      <p class="mb-2 text-sm font-medium text-slate-600">แผนก</p>
-      <div id="deptTabs" class="grid grid-cols-3 gap-2"></div>
-      <p class="mb-2 mt-3 text-sm font-medium text-slate-600">สถานะงาน</p>
-      <div id="statusTabs" class="hide-scroll -mx-3 flex gap-2 overflow-x-auto px-3"></div>
-    </section>
+            <!-- ส่วนที่ 2: ข้อมูลงานและคำสั่งการ (D-H) -->
+            <div>
+                <label class="text-xs font-semibold text-gray-600 block mb-1">เรื่อง/ชื่อเอกสาร</label>
+                <input type="text" id="form-docName" placeholder="เรื่องเอกสาร..." class="w-full p-2.5 border rounded-lg text-sm bg-gray-50">
+            </div>
+            <div>
+                <label class="text-xs font-semibold text-gray-600 block mb-1">รายละเอียดการสั่งการท้ายคำสั่ง</label>
+                <textarea id="form-details" rows="3" placeholder="ระบุคำสั่งการ..." class="w-full p-2.5 border rounded-lg text-sm bg-gray-50"></textarea>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="text-xs font-semibold text-gray-600 block mb-1">วันที่สั่งการ</label>
+                    <input type="date" id="form-dateOrdered" class="w-full p-2.5 border rounded-lg text-sm bg-gray-50">
+                </div>
+                <div>
+                    <label class="text-xs font-semibold text-gray-600 block mb-1">แผนกที่รับผิดชอบ</label>
+                    <select id="form-department" class="w-full p-2.5 border rounded-lg text-sm bg-gray-50">
+                        <option value="ผคป.">ผคป.</option>
+                        <option value="ผคอ.">ผคอ.</option>
+                    </select>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="text-xs font-semibold text-gray-600 block mb-1">ชั้นความเร็ว</label>
+                    <select id="form-priority" class="w-full p-2.5 border rounded-lg text-sm bg-gray-50">
+                        <option value="ปกติ">ปกติ</option>
+                        <option value="ด่วน">ด่วน</option>
+                        <option value="ด่วนมาก">ด่วนมาก</option>
+                        <option value="ด่วนที่สุด">ด่วนที่สุด</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="text-xs font-semibold text-gray-600 block mb-1">สถานะ</label>
+                    <select id="form-status" class="w-full p-2.5 border rounded-lg text-sm bg-gray-50">
+                        <option value="ยังไม่ทำ">ยังไม่ทำ</option>
+                        <option value="กำลังทำ">กำลังทำ</option>
+                        <option value="เสร็จสิ้น">เสร็จสิ้น</option>
+                    </select>
+                </div>
+            </div>
 
-    <section aria-label="สรุปตัวเลข" id="kpi" class="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3"></section>
-
-    <p id="resultInfo" class="mt-5 text-sm text-slate-500"></p>
-    <section id="taskList" aria-label="รายการงาน" class="mt-2 grid gap-3 md:grid-cols-2 xl:grid-cols-3"></section>
-  </div>
-
-  <!-- ===== หน้า 2: ธุรการ ===== -->
-  <div id="viewAdmin" class="hidden">
-
-    <section id="adminGate" class="mx-auto max-w-sm rounded-2xl bg-white p-6 ring-1 ring-slate-200">
-      <h2 class="text-lg font-semibold">เข้าสู่ระบบธุรการ</h2>
-      <p class="mt-1 text-sm text-slate-500">กรอกรหัสผ่านเพื่อบันทึกงานใหม่</p>
-      <form id="gateForm" class="mt-4">
-        <label for="pw" class="mb-1 block text-sm font-medium">รหัสผ่าน</label>
-        <input id="pw" type="password" autocomplete="current-password" class="field" required>
-        <p id="gateMsg" role="alert" class="mt-2 hidden text-sm font-medium text-red-600"></p>
-        <button type="submit" class="mt-4 h-12 w-full rounded-lg bg-ink text-base font-semibold text-white active:opacity-90">เข้าสู่ระบบ</button>
-      </form>
-    </section>
-
-    <section id="adminPanel" class="mx-auto hidden max-w-xl rounded-2xl bg-white p-5 ring-1 ring-slate-200">
-      <div class="flex items-start justify-between gap-3">
-        <div>
-          <h2 class="text-lg font-semibold">บันทึกงานใหม่</h2>
-          <p class="mt-1 text-sm text-slate-500">ข้อมูลจะถูกเพิ่มเป็นแถวใหม่ใน Google Sheets</p>
+            <!-- ส่วนที่ 3: ข้อมูลหนังสือออก (J-K) -->
+            <div class="grid grid-cols-2 gap-2 bg-purple-50 p-3 rounded-xl border border-purple-100">
+                <div>
+                    <label class="text-[11px] font-bold text-purple-900 block mb-1">เลขหนังสือออก</label>
+                    <input type="text" id="form-outNo" placeholder="เลขส่ง..." class="w-full p-2 border rounded-lg text-sm bg-white">
+                </div>
+                <div>
+                    <label class="text-[11px] font-bold text-purple-900 block mb-1">วันที่ออกหนังสือ/เสร็จสิ้น</label>
+                    <input type="date" id="form-deadline" class="w-full p-2 border rounded-lg text-sm bg-white">
+                </div>
+            </div>
+            
+            <button onclick="submitForm()" id="btn-submit" class="w-full bg-blue-600 text-white p-3 rounded-xl font-bold shadow-md hover:bg-blue-700">📌 บันทึกข้อมูลงาน</button>
+            <button onclick="deleteTask()" id="btn-delete" class="w-full bg-red-600 text-white p-2 rounded-xl font-semibold shadow-sm hover:bg-red-700 hidden">🗑| ลบงานนี้ถาวร</button>
         </div>
-        <button id="logout" class="h-10 shrink-0 rounded-full px-3 text-sm text-slate-500 ring-1 ring-slate-200 active:bg-slate-50">ออกจากระบบ</button>
-      </div>
+    </main>
 
-      <form id="taskForm" class="mt-5 grid gap-4">
-        <div>
-          <label for="f_date" class="mb-1 block text-sm font-medium">วันที่สั่งการ</label>
-          <input id="f_date" type="date" class="field" required>
-        </div>
-        <div>
-          <label for="f_title" class="mb-1 block text-sm font-medium">เรื่อง / ชื่อเอกสาร</label>
-          <input id="f_title" type="text" class="field" required>
-        </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label for="f_dept" class="mb-1 block text-sm font-medium">แผนกที่รับผิดชอบ</label>
-            <select id="f_dept" class="field" required>
-              <option value="" disabled selected>เลือกแผนก</option>
-              <option>ผคป.</option>
-              <option>ผคอ.</option>
-            </select>
-          </div>
-          <div>
-            <label for="f_urgency" class="mb-1 block text-sm font-medium">ชั้นความเร็ว</label>
-            <select id="f_urgency" class="field" required>
-              <option selected>ปกติ</option>
-              <option>ด่วน</option>
-              <option>ด่วนมาก</option>
-              <option>ด่วนที่สุด</option>
-            </select>
-          </div>
-        </div>
-        <div>
-          <label for="f_note" class="mb-1 block text-sm font-medium">รายละเอียดการสั่งการท้ายคำสั่ง</label>
-          <textarea id="f_note" class="field"></textarea>
-        </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label for="f_status" class="mb-1 block text-sm font-medium">สถานะ</label>
-            <select id="f_status" class="field">
-              <option selected>ยังไม่ทำ</option>
-              <option>กำลังทำ</option>
-              <option>เสร็จสิ้น</option>
-            </select>
-          </div>
-          <div>
-            <label for="f_due" class="mb-1 block text-sm font-medium">วันที่กำหนดส่ง</label>
-            <input id="f_due" type="date" class="field">
-          </div>
-        </div>
+    <script>
+        // ⚠️ ลบตัวหนังสือไทยออก แล้ววางลิงก์ Web App URL ตัวใหม่ล่าสุดของคุณที่นี่ครับ
+        const API_URL = 'https://script.google.com/macros/s/AKfycbwc_72tl3YY42VMcr0gpjcn0kIEQEayv8rd7ppyUrFIzoK_soAQeDVY0QKrpwaJ52ye/exec';
+        const ADMIN_PASSWORD = '1234';
 
-        <p id="formMsg" role="status" class="hidden rounded-lg px-3 py-2.5 text-sm font-medium"></p>
+        let allTasks = [];
+        let isAdminAuthenticated = false;
+        let isEditMode = false;
 
-        <button id="saveBtn" type="submit" class="h-14 w-full rounded-xl bg-blue-600 text-base font-semibold text-white shadow-sm active:bg-blue-700 disabled:opacity-60">บันทึกข้อมูลงาน</button>
-      </form>
-    </section>
-  </div>
-</main>
+        function switchPage(page) {
+            document.getElementById('page-dash').classList.add('hidden');
+            document.getElementById('page-login').classList.add('hidden');
+            document.getElementById('page-admin').classList.add('hidden');
+            document.getElementById('btn-dash').className = "px-3 py-1 hover:bg-blue-800 rounded-md text-sm text-gray-300";
+            document.getElementById('btn-admin').className = "px-3 py-1 hover:bg-blue-800 rounded-md text-sm text-gray-300";
 
-<script>
-/* =====================================================
-   ตั้งค่า
-   - API_URL: URL ของ Web App (Google Apps Script) ที่ลงท้ายด้วย /exec
-   - ADMIN_PASSWORD: รหัสผ่านหน้าธุรการ (ต้องตรงกับ PASSWORD ใน Code.gs)
-   ===================================================== */
-const CONFIG = {
-  API_URL: 'https://script.google.com/macros/s/AKfycbxtjOFH7qwCQNP1EyaACBluVk1DFjYYJxFEDyrV8nqZ0r_tm8_YmQuoOecJVfqQyQwh/exec',
-  ADMIN_PASSWORD: '1234',
-};
+            if (page === 'dash') {
+                document.getElementById('page-dash').classList.remove('hidden');
+                document.getElementById('btn-dash').className = "px-3 py-1 bg-blue-700 rounded-md font-semibold text-sm";
+                fetchData();
+            } else if (page === 'admin') {
+                if (isAdminAuthenticated) {
+                    document.getElementById('page-admin').classList.remove('hidden');
+                    document.getElementById('btn-admin').className = "px-3 py-1 bg-blue-700 rounded-md font-semibold text-sm";
+                } else {
+                    document.getElementById('page-login').classList.remove('hidden');
+                }
+            }
+        }
 
-const DEPTS = ['ผคป.', 'ผคอ.'];
-
-const URGENCY = {
-  'ด่วนที่สุด': { rank: 0, cls: 'bg-red-600 text-white' },
-  'ด่วนมาก':   { rank: 1, cls: 'bg-orange-500 text-white' },
-  'ด่วน':      { rank: 2, cls: 'bg-amber-100 text-amber-800' },
-  'ปกติ':      { rank: 3, cls: 'bg-slate-100 text-slate-600' },
-};
-
-const STATUS = {
-  'ยังไม่ทำ':  { bar: 'bg-red-500',     pill: 'bg-red-50 text-red-700',         dot: 'bg-red-500' },
-  'กำลังทำ':   { bar: 'bg-amber-400',   pill: 'bg-amber-50 text-amber-800',     dot: 'bg-amber-400' },
-  'เสร็จสิ้น': { bar: 'bg-emerald-500', pill: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
-};
-const LEGACY_STATUS = { 'ยังไม่เสร็จ': 'ยังไม่ทำ', 'กำลังดำเนินการ': 'กำลังทำ' };  // รองรับข้อมูลเดิมในชีต
-
-const STATUS_TABS = [
-  { key: 'open', label: 'ค้างทั้งหมด' },
-  { key: 'ยังไม่ทำ', label: 'ยังไม่ทำ' },
-  { key: 'กำลังทำ', label: 'กำลังทำ' },
-  { key: 'เสร็จสิ้น', label: 'เสร็จสิ้น' },
-  { key: 'all', label: 'ทั้งหมด' },
-];
-
-const state = { tasks: [], dept: 'all', status: 'open', view: 'dash', unlocked: false };
-
-/* ---------- ตัวช่วย ---------- */
-const $ = id => document.getElementById(id);
-const esc = s => String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
-const isOpen = t => t.status !== 'เสร็จสิ้น';
-const today0 = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
-const pad = n => String(n).padStart(2, '0');
-const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
-const fmtDate = d => d ? d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' }) : '–';
-const normDept = v => {
-  const t = String(v || '').replace(/\s/g, ''), key = x => x.replace(/\./g, '');
-  return DEPTS.find(d => key(d) === key(t)) || t || 'ไม่ระบุแผนก';
-};
-const normStatus = v => { const t = String(v || '').trim(); return STATUS[t] ? t : (LEGACY_STATUS[t] || 'ยังไม่ทำ'); };
-
-function parseDate(v) {
-  if (!v) return null;
-  const m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (!m) { const d = new Date(v); return isNaN(d) ? null : d; }
-  let y = +m[1];
-  if (y > 2400) y -= 543;
-  return new Date(y, +m[2] - 1, +m[3]);
-}
-
-/* ---------- เชื่อม Google Sheets (GET / POST) ---------- */
-async function fetchTasks() {
-  const res = await fetch(CONFIG.API_URL);
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  const json = await res.json();
-  if (!json.ok) throw new Error(json.error || 'ข้อมูลไม่ถูกต้อง');
-  return json.tasks.map(r => ({
-    date: parseDate(r.date),
-    title: String(r.title || '').trim(),
-    dept: normDept(r.dept),
-    note: String(r.note || '').trim(),
-    urgency: URGENCY[r.urgency] ? r.urgency : 'ปกติ',
-    status: normStatus(r.status),
-    due: parseDate(r.due),
-  })).filter(t => t.title);
-}
-
-async function postTask(payload) {
-  // ใช้ text/plain เพื่อไม่ให้เบราว์เซอร์ส่ง preflight (Apps Script ไม่รองรับ OPTIONS)
-  const res = await fetch(CONFIG.API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ ...payload, password: CONFIG.ADMIN_PASSWORD }),
-  });
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  const json = await res.json();
-  if (!json.ok) throw new Error(json.error || 'บันทึกไม่สำเร็จ');
-  return json;
-}
-
-/* ---------- Dashboard ---------- */
-function dueInfo(t) {
-  if (!t.due || !isOpen(t)) return null;
-  const diff = Math.round((t.due - today0()) / 864e5);
-  if (diff < 0) return { txt: `เลยกำหนด ${-diff} วัน`, cls: 'font-semibold text-red-600' };
-  if (diff === 0) return { txt: 'ครบกำหนดวันนี้', cls: 'font-semibold text-amber-700' };
-  if (diff <= 3) return { txt: `อีก ${diff} วัน`, cls: 'font-medium text-amber-700' };
-  return { txt: `อีก ${diff} วัน`, cls: 'text-slate-400' };
-}
-
-const urgentCount = list => list.filter(t => URGENCY[t.urgency].rank <= 1).length;
-
-function renderKpi() {
-  const open = state.tasks.filter(isOpen);
-  const card = (key, label, list, dark) => {
-    const on = state.dept === key;
-    const n = urgentCount(list);
-    const style = dark ? 'bg-ink text-white ring-ink' : on ? 'bg-ink text-white ring-ink' : 'bg-white ring-slate-200 active:bg-slate-50';
-    const sub = (dark || on) ? 'text-slate-300' : 'text-slate-500';
-    return `<button data-dept="${esc(key)}" class="rounded-2xl p-4 text-left ring-1 ${style} ${dark ? 'col-span-2 md:col-span-1' : ''}">
-      <span class="block text-sm ${sub}">${label}</span>
-      <span class="mt-1 block text-5xl font-bold leading-none tabular-nums">${list.length}</span>
-      <span class="mt-3 block text-xs ${sub}">${n ? `ด่วนมากขึ้นไป ${n} เรื่อง` : 'ไม่มีงานด่วนมาก'}</span>
-    </button>`;
-  };
-  $('kpi').innerHTML =
-    card('all', 'งานคงค้างทั้งหมด', open, true) +
-    DEPTS.map(d => card(d, 'งานค้าง ' + d, open.filter(t => t.dept === d), false)).join('');
-}
-
-function renderFilters() {
-  $('deptTabs').innerHTML = [['all', 'ทั้งหมด'], ...DEPTS.map(d => [d, d])].map(([k, l]) => {
-    const on = state.dept === k;
-    return `<button data-dept="${esc(k)}" aria-pressed="${on}" class="h-11 rounded-lg text-sm font-semibold ring-1 ${on ? 'bg-ink text-white ring-ink' : 'bg-white text-slate-700 ring-slate-300 active:bg-slate-50'}">${l}</button>`;
-  }).join('');
-  $('statusTabs').innerHTML = STATUS_TABS.map(t => {
-    const on = state.status === t.key;
-    const dot = STATUS[t.key] ? `<span class="h-2 w-2 rounded-full ${STATUS[t.key].dot}"></span>` : '';
-    return `<button data-status="${esc(t.key)}" aria-pressed="${on}" class="flex h-11 shrink-0 items-center gap-2 rounded-full px-4 text-sm font-medium ring-1 ${on ? 'bg-ink text-white ring-ink' : 'bg-white text-slate-700 ring-slate-300 active:bg-slate-50'}">${dot}${t.label}</button>`;
-  }).join('');
-}
-
-function filtered() {
-  const far = 8.64e15;
-  return state.tasks
-    .filter(t => state.dept === 'all' || t.dept === state.dept)
-    .filter(t => state.status === 'all' ? true : state.status === 'open' ? isOpen(t) : t.status === state.status)
-    .sort((a, b) => URGENCY[a.urgency].rank - URGENCY[b.urgency].rank
-      || (a.due ? +a.due : far) - (b.due ? +b.due : far)
-      || (a.date ? +a.date : far) - (b.date ? +b.date : far));
-}
-
-function taskCard(t) {
-  const s = STATUS[t.status], di = dueInfo(t);
-  return `<article class="relative overflow-hidden rounded-xl bg-white ring-1 ring-slate-200 ${isOpen(t) ? '' : 'opacity-70'}">
-    <span class="absolute inset-y-0 left-0 w-1.5 ${s.bar}"></span>
-    <div class="py-4 pl-5 pr-4">
-      <div class="flex items-start justify-between gap-3">
-        <h3 class="text-base font-semibold leading-snug">${esc(t.title)}</h3>
-        <span class="shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${URGENCY[t.urgency].cls}">${esc(t.urgency)}</span>
-      </div>
-      <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500">
-        <span class="font-medium text-slate-700">${esc(t.dept)}</span>
-        <span>สั่งการ ${fmtDate(t.date)}</span>
-        <span>กำหนดส่ง ${fmtDate(t.due)}</span>
-      </div>
-      <div class="mt-3 rounded-lg bg-slate-50 px-3 py-2.5">
-        <p class="text-xs font-medium text-slate-500">คำสั่งการท้ายหนังสือ</p>
-        <p class="mt-0.5 whitespace-pre-line text-sm leading-relaxed text-slate-800">${esc(t.note) || '–'}</p>
-      </div>
-      <div class="mt-3 flex items-center justify-between gap-2">
-        <span class="rounded-full px-2.5 py-1 text-xs font-medium ${s.pill}">${esc(t.status)}</span>
-        ${di ? `<span class="text-xs ${di.cls}">${di.txt}</span>` : ''}
-      </div>
-    </div>
-  </article>`;
-}
-
-function renderList() {
-  const list = filtered();
-  $('resultInfo').textContent = `แสดง ${list.length} รายการ` + (state.dept !== 'all' ? ` ของ ${state.dept}` : '') + ' เรียงตามความเร่งด่วนและวันกำหนดส่ง';
-  $('taskList').innerHTML = list.length
-    ? list.map(taskCard).join('')
-    : `<div class="col-span-full rounded-xl bg-white p-8 text-center ring-1 ring-slate-200">
-         <p class="font-medium">ไม่มีงานตามตัวกรองนี้</p>
-         <p class="mt-1 text-sm text-slate-500">ลองเปลี่ยนแผนกหรือสถานะที่เลือก</p>
-         <button data-reset class="mt-4 h-11 rounded-full bg-ink px-5 text-sm font-medium text-white">ล้างตัวกรอง</button>
-       </div>`;
-}
-
-function renderAll() { renderFilters(); renderKpi(); renderList(); }
-
-/* ---------- สลับหน้า ---------- */
-function setView(v) {
-  state.view = v;
-  $('viewDash').classList.toggle('hidden', v !== 'dash');
-  $('viewAdmin').classList.toggle('hidden', v !== 'admin');
-  $('refresh').classList.toggle('hidden', v !== 'dash');
-  document.querySelectorAll('[data-view]').forEach(b => {
-    const on = b.dataset.view === v;
-    b.setAttribute('aria-selected', on);
-    b.className = 'h-12 border-b-4 px-4 text-sm font-semibold ' + (on ? 'border-white text-white' : 'border-transparent text-slate-300');
-  });
-  $('adminGate').classList.toggle('hidden', state.unlocked);
-  $('adminPanel').classList.toggle('hidden', !state.unlocked);
-  if (v === 'admin' && !state.unlocked) setTimeout(() => $('pw').focus(), 50);
-  window.scrollTo({ top: 0 });
-}
-
-/* ---------- ธุรการ: รหัสผ่าน + ฟอร์ม ---------- */
-$('gateForm').addEventListener('submit', e => {
-  e.preventDefault();
-  if ($('pw').value === CONFIG.ADMIN_PASSWORD) {
-    state.unlocked = true;
-    $('gateMsg').classList.add('hidden');
-    $('pw').value = '';
-    resetForm();
-    setView('admin');
-  } else {
-    $('gateMsg').textContent = 'รหัสผ่านไม่ถูกต้อง กรุณาลองใหม่';
-    $('gateMsg').classList.remove('hidden');
-    $('pw').value = '';
-    $('pw').focus();
-  }
-});
-
-$('logout').addEventListener('click', () => { state.unlocked = false; setView('dash'); });
-
-function showFormMsg(text, ok) {
-  const el = $('formMsg');
-  el.textContent = text;
-  el.className = 'rounded-lg px-3 py-2.5 text-sm font-medium ' + (ok ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-700');
-}
-
-function resetForm() {
-  $('taskForm').reset();
-  $('f_date').value = todayStr();
-}
-
-$('taskForm').addEventListener('submit', async e => {
-  e.preventDefault();
-  const payload = {
-    date: $('f_date').value,
-    title: $('f_title').value.trim(),
-    dept: $('f_dept').value,
-    urgency: $('f_urgency').value,
-    note: $('f_note').value.trim(),
-    status: $('f_status').value,
-    due: $('f_due').value,
-  };
-  if (!payload.title) return showFormMsg('กรุณากรอกเรื่อง/ชื่อเอกสาร', false);
-  if (payload.due && payload.due < payload.date) return showFormMsg('วันที่กำหนดส่งต้องไม่ก่อนวันที่สั่งการ', false);
-
-  const btn = $('saveBtn');
-  btn.disabled = true; btn.textContent = 'กำลังบันทึก…';
-  try {
-    await postTask(payload);
-    showFormMsg('บันทึกข้อมูลงานเรียบร้อยแล้ว', true);
-    resetForm();
-    load(true);                       // รีเฟรชข้อมูลหน้า Dashboard เงียบๆ
-  } catch (err) {
-    showFormMsg('บันทึกไม่สำเร็จ: ' + err.message, false);
-  } finally {
-    btn.disabled = false; btn.textContent = 'บันทึกข้อมูลงาน';
-  }
-});
-
-/* ---------- เหตุการณ์ทั่วไป ---------- */
-document.addEventListener('click', e => {
-  const v = e.target.closest('[data-view]');
-  const d = e.target.closest('[data-dept]');
-  const s = e.target.closest('[data-status]');
-  if (v) setView(v.dataset.view);
-  else if (d) { state.dept = d.dataset.dept; renderAll(); }
-  else if (s) { state.status = s.dataset.status; renderAll(); }
-  else if (e.target.closest('[data-retry]')) load();
-  else if (e.target.closest('[data-reset]')) { state.dept = 'all'; state.status = 'all'; renderAll(); }
-});
-
-async function load(quiet) {
-  $('refreshIcon').classList.add('spin');
-  if (!state.tasks.length && !quiet) $('taskList').innerHTML = '<p class="col-span-full py-10 text-center text-slate-500">กำลังโหลดข้อมูล…</p>';
-  try {
-    state.tasks = await fetchTasks();
-    $('updated').textContent = 'อัปเดตล่าสุด ' + new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
-    renderAll();
-  } catch (err) {
-    $('updated').textContent = 'โหลดข้อมูลไม่สำเร็จ';
-    if (!state.tasks.length) {
-      renderFilters(); renderKpi();
-      $('resultInfo').textContent = '';
-      $('taskList').innerHTML = `<div class="col-span-full rounded-xl bg-white p-8 text-center ring-1 ring-slate-200">
-        <p class="font-medium">โหลดข้อมูลไม่สำเร็จ</p>
-        <p class="mt-1 text-sm text-slate-500">ตรวจสอบอินเทอร์เน็ต แล้วลองอีกครั้ง</p>
-        <button data-retry class="mt-4 h-11 rounded-full bg-ink px-5 text-sm font-medium text-white">ลองใหม่</button>
-      </div>`;
-    }
-  } finally {
-    $('refreshIcon').classList.remove('spin');
-  }
-}
-$('refresh').addEventListener('click', () => load());
-
-setView('dash');
-renderFilters();
-load();
-</script>
-</body>
-</html>
